@@ -8,6 +8,8 @@ import type { VisionProvider } from "../ai/provider.js";
 import { store } from "../store/store.js";
 import { prepareImage } from "../image/preprocess.js";
 import { runFailureCheck } from "../analysis/failureCheck.js";
+import { runBedStateCheck } from "../analysis/bedState.js";
+import { runPrinterDetection } from "../analysis/printerDetect.js";
 import { startTroubleshoot, verifyOutcome } from "../analysis/troubleshoot.js";
 
 export function createServer(cfg: AppConfig, source: CaptureSource, ai: VisionProvider) {
@@ -41,6 +43,8 @@ export function createServer(cfg: AppConfig, source: CaptureSource, ai: VisionPr
       ai: { name: ai.name, ...health },
       check: cfg.check,
       latest: store.latestCheck() ?? null,
+      latestBedState: store.latestBedState() ?? null,
+      latestPrinter: store.latestPrinterDetection() ?? null,
     });
   });
 
@@ -75,6 +79,46 @@ export function createServer(cfg: AppConfig, source: CaptureSource, ai: VisionPr
   });
 
   app.get("/api/checks", (_req, res) => res.json(store.listChecks()));
+
+  // --- use case 3: bed / job state ---
+  let bedRunning = false;
+  app.post("/api/bed-state", async (_req, res) => {
+    if (bedRunning) return res.status(409).json({ error: "a bed-state check is already running" });
+    bedRunning = true;
+    emit("bed:start", {});
+    try {
+      const result = await runBedStateCheck(source, ai, cfg, (msg) => emit("bed:progress", { msg }));
+      emit("bed:done", result);
+      res.json(result);
+    } catch (e) {
+      emit("bed:error", { error: (e as Error).message });
+      res.status(500).json({ error: (e as Error).message });
+    } finally {
+      bedRunning = false;
+    }
+  });
+
+  app.get("/api/bed-states", (_req, res) => res.json(store.listBedStates()));
+
+  // --- use case 4: printer detection ---
+  let printerRunning = false;
+  app.post("/api/printer", async (_req, res) => {
+    if (printerRunning) return res.status(409).json({ error: "a printer detection is already running" });
+    printerRunning = true;
+    emit("printer:start", {});
+    try {
+      const result = await runPrinterDetection(source, ai, cfg, (msg) => emit("printer:progress", { msg }));
+      emit("printer:done", result);
+      res.json(result);
+    } catch (e) {
+      emit("printer:error", { error: (e as Error).message });
+      res.status(500).json({ error: (e as Error).message });
+    } finally {
+      printerRunning = false;
+    }
+  });
+
+  app.get("/api/printers", (_req, res) => res.json(store.listPrinterDetections()));
 
   // --- use case 2: troubleshooting ---
   app.post("/api/troubleshoot", async (req, res) => {

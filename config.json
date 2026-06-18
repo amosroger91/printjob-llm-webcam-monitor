@@ -4,10 +4,10 @@
     "host": "127.0.0.1"
   },
   "camera": {
-    "comment": "type: 'http-snapshot' (OctoPrint ?action=snapshot or any JPEG URL), 'mjpeg' (MJPEG stream URL), 'usb' (local webcam via ffmpeg), or 'folder' (watch a directory of images).",
-    "type": "http-snapshot",
+    "comment": "type: 'http-snapshot' (OctoPrint ?action=snapshot or any JPEG URL), 'mjpeg' (MJPEG stream URL), 'usb' (local webcam via ffmpeg), or 'folder' (watch a directory of images). For 'usb', usbDevice is the ffmpeg dshow name (list with: ffmpeg -list_devices true -f dshow -i dummy). ffmpegPath is optional — set it to an absolute ffmpeg path only if ffmpeg is not on your PATH; PW_FFMPEG env var works too.",
+    "type": "usb",
     "url": "http://localhost:8080/?action=snapshot",
-    "usbDevice": "video=Integrated Camera",
+    "usbDevice": "video=USB 2.0 Camera",
     "folderPath": "./data/incoming"
   },
   "image": {
@@ -32,5 +32,17 @@
     "frameDelayMs": 4000,
     "confidenceThreshold": 0.6,
     "sampleTemperature": 0.6
+  },
+  "confirm": {
+    "comment": "Second-opinion jury. When the primary model suspects a failure, these other local vision models vote to confirm. Add any pulled Ollama vision models, e.g. qwen2.5vl:7b, llava:7b, llama3.2-vision. Empty list = self-check only.",
+    "enabled": true,
+    "models": ["moondream"],
+    "samplesPerJuror": 1
+  },
+  "printer": {
+    "comment": "Printer-detection web lookup. When the vision model reads branding off the machine, search that TEXT (never the image) to pin down the exact make/model. Set webLookup:false for fully offline, vision-only detection.",
+    "webLookup": true,
+    "searchEndpoint": "https://html.duckduckgo.com/html/",
+    "maxResults": 5
   }
 }

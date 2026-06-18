@@ -7,18 +7,32 @@ import type { CaptureSource } from "./source.js";
 // Requires ffmpeg on PATH.
 export class UsbWebcamSource implements CaptureSource {
   readonly kind = "usb";
-  constructor(private device: string, private platform: NodeJS.Platform = process.platform) {}
+  // Allow an explicit binary path (or PW_FFMPEG env) so capture works even before
+  // a freshly-installed ffmpeg is on PATH. Falls back to "ffmpeg" on PATH.
+  private readonly bin: string;
+  constructor(
+    private device: string,
+    ffmpegPath?: string,
+    private platform: NodeJS.Platform = process.platform,
+  ) {
+    this.bin = ffmpegPath || process.env.PW_FFMPEG || "ffmpeg";
+  }
 
   async grab(): Promise<Buffer> {
     const args = this.ffmpegArgs();
     return new Promise<Buffer>((resolve, reject) => {
-      const ff = spawn("ffmpeg", args, { stdio: ["ignore", "pipe", "pipe"] });
+      const ff = spawn(this.bin, args, { stdio: ["ignore", "pipe", "pipe"] });
       const chunks: Buffer[] = [];
       let err = "";
       ff.stdout.on("data", (d) => chunks.push(d));
       ff.stderr.on("data", (d) => (err += d.toString()));
       ff.on("error", (e) =>
-        reject(new Error(`ffmpeg not runnable (${(e as Error).message}). Install ffmpeg and add to PATH.`)),
+        reject(
+          new Error(
+            `ffmpeg not runnable at "${this.bin}" (${(e as Error).message}). ` +
+              `Install ffmpeg and add it to PATH, or set camera.ffmpegPath / PW_FFMPEG.`,
+          ),
+        ),
       );
       ff.on("close", (code) => {
         const out = Buffer.concat(chunks);
@@ -29,7 +43,7 @@ export class UsbWebcamSource implements CaptureSource {
   }
 
   private ffmpegArgs(): string[] {
-    const common = ["-frames:v", "1", "-f", "image2pipe", "-vcodec", "mjpeg", "-"];
+    const common = ["-hide_banner", "-loglevel", "error", "-frames:v", "1", "-f", "image2pipe", "-vcodec", "mjpeg", "-"];
     if (this.platform === "win32") {
       return ["-f", "dshow", "-i", this.device, ...common];
     }

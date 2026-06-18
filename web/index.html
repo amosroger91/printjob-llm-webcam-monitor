@@ -33,6 +33,24 @@
         <div id="checkResult" class="result empty">No check run yet.</div>
       </section>
 
+      <section class="panel printer">
+        <div class="panel-head">
+          <h2>What printer is this?</h2>
+          <button id="printerBtn" class="primary">Identify printer</button>
+        </div>
+        <div id="printerProgress" class="progress"></div>
+        <div id="printerResult" class="result empty">Not identified yet.</div>
+      </section>
+
+      <section class="panel bedstate">
+        <div class="panel-head">
+          <h2>Printer / bed state</h2>
+          <button id="bedBtn" class="primary">Read bed state</button>
+        </div>
+        <div id="bedProgress" class="progress"></div>
+        <div id="bedResult" class="result empty">No reading yet.</div>
+      </section>
+
       <section class="panel troubleshoot">
         <h2>Why did it fail? — investigate</h2>
         <textarea id="symptom" rows="2" placeholder="Describe what you see, e.g. 'first layer not sticking on the left side' or 'print turned into spaghetti halfway up'"></textarea>

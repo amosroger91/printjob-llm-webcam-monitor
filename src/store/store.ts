@@ -2,11 +2,13 @@ import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { DATA_DIR } from "../config.js";
-import type { CheckResult, TroubleshootSession } from "../types.js";
+import type { BedStateResult, CheckResult, PrinterDetectionResult, TroubleshootSession } from "../types.js";
 
 interface DbShape {
   checks: CheckResult[];
   sessions: TroubleshootSession[];
+  bedStates: BedStateResult[];
+  printers: PrinterDetectionResult[];
 }
 
 const SNAP_DIR = join(DATA_DIR, "snapshots");
@@ -16,7 +18,7 @@ const MAX_CHECKS = 200;
 // Tiny synchronous JSON store. No native deps, easy to inspect by hand. Fine for
 // a single-user local dashboard; swap for SQLite if history grows large.
 class Store {
-  private db: DbShape = { checks: [], sessions: [] };
+  private db: DbShape = { checks: [], sessions: [], bedStates: [], printers: [] };
 
   init() {
     mkdirSync(SNAP_DIR, { recursive: true });
@@ -29,6 +31,8 @@ class Store {
     }
     this.db.checks ??= [];
     this.db.sessions ??= [];
+    this.db.bedStates ??= [];
+    this.db.printers ??= [];
   }
 
   private persist() {
@@ -58,6 +62,34 @@ class Store {
 
   latestCheck() {
     return this.db.checks[0];
+  }
+
+  addBedState(b: BedStateResult) {
+    this.db.bedStates.unshift(b);
+    if (this.db.bedStates.length > MAX_CHECKS) this.db.bedStates.length = MAX_CHECKS;
+    this.persist();
+  }
+
+  listBedStates(limit = 50) {
+    return this.db.bedStates.slice(0, limit);
+  }
+
+  latestBedState() {
+    return this.db.bedStates[0];
+  }
+
+  addPrinterDetection(p: PrinterDetectionResult) {
+    this.db.printers.unshift(p);
+    if (this.db.printers.length > MAX_CHECKS) this.db.printers.length = MAX_CHECKS;
+    this.persist();
+  }
+
+  listPrinterDetections(limit = 50) {
+    return this.db.printers.slice(0, limit);
+  }
+
+  latestPrinterDetection() {
+    return this.db.printers[0];
   }
 
   addSession(s: TroubleshootSession) {

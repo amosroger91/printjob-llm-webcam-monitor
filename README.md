@@ -21,12 +21,15 @@ No cloud · no API keys · no images leave your machine.
 |---|---|
 | 🔎 **"Has this print failed?"** | An on-demand health check with a real **double-check**: it votes across multiple model passes *and* multiple frames seconds apart, so glare, a moving nozzle, or one bad guess don't trigger false alarms. |
 | 🛠️ **"Why did it fail?"** | The model diagnoses your symptom, proposes concrete changes each with a **visually verifiable** success signal, then watches a later snapshot (before vs. after) to confirm the fix actually worked. |
+| 🟢 **"What's on the bed?"** | A one-click read of the printer's state — **empty/clean**, **printing**, **complete** (finished part ready to remove), or **failed** — voted across passes the same way. |
+| 🖨️ **"What printer is this?"** | Identifies the machine in view: motion style (bed-slinger / CoreXY / delta) and enclosure, plus make/model. It **reads the branding off the machine and looks it up online** to name the exact printer instead of guessing (e.g. `ACE GEN2` → Anycubic Kobra X). |
 
 ## Contents
 
 - [Quick start](#quick-start)
 - [Configure your camera](#configure-your-camera)
 - [Choosing a model](#choosing-a-model)
+- [Printer & bed state](#printer--bed-state)
 - [How it works](#how-it-works)
 - [Tuning & accuracy](#tuning--accuracy)
 - [API](#api)
@@ -62,8 +65,26 @@ camera is configured — set your URL in `config.json` (below) and you're live.
 > **OctoPrint users:** the webcam is just a normal MJPEG/snapshot endpoint —
 > point `http-snapshot` at `http://<octoprint-host>/webcam/?action=snapshot`.
 
+### USB webcam on the host PC
+
+For a webcam plugged straight into the machine running print-watch, set `camera.type`
+to `usb` and `camera.usbDevice` to the device's `ffmpeg` name. Frames are grabbed with
+[`ffmpeg`](https://ffmpeg.org), so it must be installed (`winget install Gyan.FFmpeg`,
+`brew install ffmpeg`, or your distro's package).
+
+List your devices, then copy the name into `usbDevice`:
+
+```bash
+# Windows (DirectShow)
+ffmpeg -list_devices true -f dshow -i dummy      # → usbDevice: "video=USB 2.0 Camera"
+# macOS (AVFoundation):  usbDevice "0"   ·   Linux (V4L2):  usbDevice "/dev/video0"
+```
+
+If `ffmpeg` isn't on your `PATH` (e.g. a fresh install in an already-open terminal),
+point at it with `camera.ffmpegPath` or the `PW_FFMPEG` env var.
+
 Env overrides (no file edit needed): `PW_CAMERA_URL` · `PW_CAMERA_TYPE` · `PW_MODEL` ·
-`PW_OLLAMA_URL` · `PW_PORT`.
+`PW_OLLAMA_URL` · `PW_PORT` · `PW_FFMPEG`.
 
 ## Choosing a model
 
@@ -80,6 +101,35 @@ beyond Ollama. Any Ollama vision model works:
 > On CPU a single pass on a 4B model is ~30–40s, so the default 2×2 double-check takes a
 > couple of minutes. Use a smaller model or a GPU for snappier checks.
 
+## Printer & bed state
+
+Two lightweight, one-click reads that answer "what am I looking at?" — both use the same
+self-consistency voting as the failure check (`check.samples` passes, majority wins).
+
+**Bed / job state** (`POST /api/bed-state`) classifies the plate into one of:
+
+| State | Meaning |
+|-------|---------|
+| `empty` | bed is clear and clean, ready for a new job |
+| `printing` | a part is on the bed and the build is in progress |
+| `complete` | a finished part is sitting on the bed, ready to remove |
+| `failed` | the bed is occupied by a spaghetti/detached/blob mess |
+
+**Printer detection** (`POST /api/printer`) reports motion style
+(`bed_slinger` · `corexy` · `delta`), enclosure, and make/model. The vision model can
+*read* the branding on a machine but doesn't *know* the product catalog — so when it sees
+legible text it runs a **web lookup** and names the printer from real search results:
+
+```
+ vision reads "ACE GEN2"  ─►  DuckDuckGo search  ─►  model picks make/model from results
+                                                     →  Anycubic Kobra X  (web-identified)
+```
+
+> **Privacy:** the web lookup is the *only* feature that sends anything off the machine,
+> and it sends **only the short text read off the printer** — never the image. Set
+> `printer.webLookup: false` in `config.json` for fully-offline, vision-only detection.
+> Endpoint and result count are configurable under the `printer` block.
+
 ## How it works
 
 ```
@@ -92,8 +142,9 @@ beyond Ollama. Any Ollama vision model works:
 | `capture/`   | `CaptureSource` implementations (`http-snapshot`, `mjpeg`, `usb`, `folder`) |
 | `image/`     | `sharp` preprocessing + before/after stitching                              |
 | `ai/`        | `VisionProvider` interface, Ollama impl, small-model-tuned prompts & schemas|
-| `analysis/`  | `failureCheck` (double-check) and `troubleshoot` (diagnose → verify)        |
-| `store/`     | JSON-file persistence of checks, sessions, snapshots                        |
+| `analysis/`  | `failureCheck`, `troubleshoot`, `bedState`, and `printerDetect`             |
+| `web/`       | `ddgSearch` — text-only DuckDuckGo lookup used to ground printer make/model |
+| `store/`     | JSON-file persistence of checks, sessions, bed-states, detections, snapshots|
 | `server/`    | Express API + SSE; serves the static dashboard in `web/`                    |
 
 Add a `VisionProvider` to swap the model backend, or a `CaptureSource` to add a camera —
@@ -133,6 +184,10 @@ See [`test/fixtures.json`](test/fixtures.json) for the labeled set and its sourc
 | GET    | `/api/snapshot`                       | Live preprocessed frame (JPEG)       |
 | POST   | `/api/check`                          | Run a double-checked failure check   |
 | GET    | `/api/checks`                         | Recent check history                 |
+| POST   | `/api/bed-state`                      | Read bed/job state (empty/printing/complete/failed) |
+| GET    | `/api/bed-states`                     | Recent bed-state history             |
+| POST   | `/api/printer`                        | Identify the printer (+ web lookup)  |
+| GET    | `/api/printers`                       | Recent printer detections            |
 | POST   | `/api/troubleshoot`                   | Start an investigation (`{ symptom }`)|
 | POST   | `/api/troubleshoot/:id/verify`        | Verify an applied change worked      |
 | GET    | `/api/sessions` · `/api/sessions/:id` | Troubleshooting sessions             |

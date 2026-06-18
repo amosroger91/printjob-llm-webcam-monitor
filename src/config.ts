@@ -23,6 +23,8 @@ function stripComments(o: unknown): unknown {
 
 function load(): AppConfig {
   const raw = stripComments(JSON.parse(readFileSync(join(ROOT, "config.json"), "utf8"))) as AppConfig;
+  // Back-compat default for configs written before printer detection existed.
+  raw.printer ??= { webLookup: true, searchEndpoint: "https://html.duckduckgo.com/html/", maxResults: 5 };
   // Env overrides for the things you most often tweak without editing the file.
   if (process.env.PW_CAMERA_URL) raw.camera.url = process.env.PW_CAMERA_URL;
   if (process.env.PW_CAMERA_TYPE) raw.camera.type = process.env.PW_CAMERA_TYPE as AppConfig["camera"]["type"];

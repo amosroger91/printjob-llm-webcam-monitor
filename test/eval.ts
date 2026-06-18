@@ -12,7 +12,7 @@ import { config } from "../src/config.js";
 import { prepareImage } from "../src/image/preprocess.js";
 import { OllamaVisionProvider } from "../src/ai/ollama.js";
 import { FAILURE_SCHEMA, FAILURE_SYSTEM, failureUserPrompt, type RawFailureJson } from "../src/ai/prompts.js";
-import { rawToPass } from "../src/analysis/failureCheck.js";
+import { rawToPass } from "../src/analysis/interpret.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const SAMPLES = Number(process.env.PW_EVAL_SAMPLES ?? 1);

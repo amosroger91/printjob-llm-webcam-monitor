@@ -16,7 +16,7 @@ export function createCaptureSource(cfg: CameraConfig): CaptureSource {
       if (!cfg.url) throw new Error("camera.url required for mjpeg");
       return new MjpegSource(cfg.url);
     case "usb":
-      return new UsbWebcamSource(cfg.usbDevice ?? "");
+      return new UsbWebcamSource(cfg.usbDevice ?? "", cfg.ffmpegPath);
     case "folder":
       if (!cfg.folderPath) throw new Error("camera.folderPath required for folder");
       return new FolderSource(cfg.folderPath);

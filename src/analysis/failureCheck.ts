@@ -9,48 +9,19 @@ import {
   type RawFailureJson,
 } from "../ai/prompts.js";
 import { store } from "../store/store.js";
+import { rawToPass, clamp01 } from "./interpret.js";
+import { runConfirmation, hasSecondOpinion } from "./confirm.js";
 import type {
   AppConfig,
   CheckResult,
+  Confirmation,
   IssueFinding,
   IssueType,
+  JurorVerdict,
   SinglePass,
 } from "../types.js";
 
-// Catastrophic modes mean the print has failed even if the model under-rates the overall
-// state. Stringing/other on their own are treated as minor unless the model says "failing".
-const CATASTROPHIC: IssueType[] = ["spaghetti", "detached", "blob", "layer_shift"];
-const CERTAINTY_CONF: Record<RawFailureJson["certainty"], number> = { low: 0.4, medium: 0.65, high: 0.9 };
-
-/**
- * Map the model's categorical report to a verdict. The baseline eval showed the model's
- * own holistic judgment is unreliable, but its anomaly detection is strong — so we derive
- * "failed" from the detected issue + state rather than trusting a single boolean.
- */
-export function rawToPass(raw: RawFailureJson): SinglePass {
-  const issue = raw.primary_issue;
-  const stateFailing = raw.print_state === "failing";
-  const failed = stateFailing || CATASTROPHIC.includes(issue as IssueType);
-
-  let confidence = CERTAINTY_CONF[raw.certainty] ?? 0.4;
-  if (raw.print_state === "unsure") confidence = Math.min(confidence, 0.3);
-
-  const issues: IssueFinding[] = [];
-  if (issue && issue !== "none") {
-    issues.push({
-      type: issue as IssueType,
-      present: true,
-      severity: failed ? "major" : "minor",
-      note: raw.reasoning ?? "",
-    });
-  }
-  return { failed, confidence: clamp01(confidence), issues, reasoning: raw.reasoning ?? "" };
-}
-
-function clamp01(n: number): number {
-  if (typeof n !== "number" || Number.isNaN(n)) return 0;
-  return Math.max(0, Math.min(1, n));
-}
+export { rawToPass } from "./interpret.js";
 
 /** Majority vote of samples within one frame. */
 function fuseFrame(passes: SinglePass[]): { failed: boolean; confidence: number; issueCounts: Map<IssueType, number> } {
@@ -89,11 +60,13 @@ export async function runFailureCheck(
   const allPasses: SinglePass[] = [];
   const snapshotPaths: string[] = [];
   const frameResults: ReturnType<typeof fuseFrame>[] = [];
+  let lastFrameBase64 = "";
 
   for (let f = 0; f < frames; f++) {
     onProgress?.(`Capturing frame ${f + 1}/${frames}…`);
     const raw = await source.grab();
     const prepped = await prepareImage(raw, cfg.image);
+    lastFrameBase64 = prepped.base64;
     snapshotPaths.push(await store.saveSnapshot(`${id}-f${f}`, prepped.bytes));
 
     const framePasses: SinglePass[] = [];
@@ -124,7 +97,7 @@ export async function runFailureCheck(
   // Cross-frame fusion: real failures persist across frames.
   const failedFrames = frameResults.filter((r) => r.failed).length;
   const overallFailed = failedFrames > frames / 2;
-  const confidence = aggregateConfidence(frameResults, overallFailed);
+  let confidence = aggregateConfidence(frameResults, overallFailed);
 
   // Issues: surface a type if it was flagged in a majority of failed frames.
   const issues = aggregateIssues(frameResults, samples);
@@ -133,7 +106,30 @@ export async function runFailureCheck(
   if (confidence < confidenceThreshold) verdict = "uncertain";
   else verdict = overallFailed ? "failed" : "ok";
 
-  const summary = buildSummary(verdict, issues, failedFrames, frames, confidence);
+  // Second-opinion jury: only when a failure is suspected (failed or uncertain) and
+  // other models are available. Diverse models confirm true failures and veto false
+  // alarms — corroboration -> failed; disagreement -> downgrade to uncertain.
+  let confirmation: Confirmation | undefined;
+  const suspected = overallFailed || verdict === "uncertain";
+  if (suspected && hasSecondOpinion(cfg)) {
+    const primaryJuror: JurorVerdict = {
+      model: ai.name,
+      verdict: overallFailed ? "failed" : "unsure",
+      confidence,
+      issues: issues.map((i) => i.type),
+      note: issues.map((i) => i.type).join(", "),
+    };
+    confirmation = await runConfirmation(lastFrameBase64, cfg, primaryJuror, onProgress);
+    if (confirmation.confirmed) {
+      verdict = "failed";
+      confidence = Math.max(confidence, confirmation.failedVotes / confirmation.totalVotes);
+    } else {
+      // The jury did not corroborate the primary — flag for a human rather than alarm.
+      verdict = "uncertain";
+    }
+  }
+
+  const summary = buildSummary(verdict, issues, failedFrames, frames, confidence, confirmation);
 
   const result: CheckResult = {
     id,
@@ -146,6 +142,7 @@ export async function runFailureCheck(
     samplesPerFrame: samples,
     passes: allPasses,
     snapshotPaths,
+    confirmation,
   };
   store.addCheck(result);
   return result;
@@ -185,13 +182,21 @@ function buildSummary(
   failedFrames: number,
   frames: number,
   confidence: number,
+  confirmation?: Confirmation,
 ): string {
   const pct = Math.round(confidence * 100);
+  const jury = confirmation
+    ? ` Jury ${confirmation.failedVotes}/${confirmation.totalVotes} agreed it failed (${confirmation.jury
+        .map((j) => `${shortModel(j.model)}:${j.verdict}`)
+        .join(", ")}).`
+    : "";
   if (verdict === "ok") return `Print looks healthy across ${frames} frame(s). Confidence ${pct}%.`;
   if (verdict === "uncertain")
-    return `Possible problem but not certain (${failedFrames}/${frames} frames, ${pct}% confidence). Worth a human glance${issues.length ? `: ${issues.map((i) => i.type).join(", ")}` : ""}.`;
+    return `Possible problem but not certain (${failedFrames}/${frames} frames, ${pct}% confidence).${jury} Worth a human glance${issues.length ? `: ${issues.map((i) => i.type).join(", ")}` : ""}.`;
   const list = issues.length ? issues.map((i) => `${i.type} (${i.severity})`).join(", ") : "an unspecified problem";
-  return `Likely FAILURE: ${list}. Seen in ${failedFrames}/${frames} frames, ${pct}% confidence.`;
+  return `Likely FAILURE: ${list}. Seen in ${failedFrames}/${frames} frames, ${pct}% confidence.${jury}`;
 }
+
+const shortModel = (m: string) => m.replace(/^ollama:/, "").split(":")[0];
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));

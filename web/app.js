@@ -44,6 +44,14 @@ es.onmessage = (e) => {
     case "check:done": logLine(`check done: ${evt.data.verdict}`); break;
     case "check:error": logLine(`check error: ${evt.data.error}`); break;
     case "alert": logLine(`⚠ ALERT: ${evt.data.summary}`); break;
+    case "printer:start": logLine("printer detection started"); break;
+    case "printer:progress": logLine(evt.data.msg); $("printerProgress").textContent = evt.data.msg; break;
+    case "printer:done": logLine(`printer: ${evt.data.brand} ${evt.data.model} (${evt.data.kinematics})`); break;
+    case "printer:error": logLine(`printer-detect error: ${evt.data.error}`); break;
+    case "bed:start": logLine("bed-state read started"); break;
+    case "bed:progress": logLine(evt.data.msg); $("bedProgress").textContent = evt.data.msg; break;
+    case "bed:done": logLine(`bed state: ${evt.data.state}`); break;
+    case "bed:error": logLine(`bed-state error: ${evt.data.error}`); break;
     case "ts:start": logLine(`investigating: ${evt.data.symptom}`); break;
     case "ts:diagnosed": logLine(`diagnosis ready (${evt.data.suggestions.length} suggestions)`); break;
     case "ts:verifying": logLine("verifying outcome…"); break;
@@ -110,6 +118,129 @@ async function loadHistory() {
   }
 }
 loadHistory();
+
+// ---------- use case 4: printer detection ----------
+const KINE_LABEL = {
+  bed_slinger: "Open-frame bed-slinger (i3)",
+  corexy: "CoreXY (boxed)",
+  delta: "Delta",
+  other: "Other / non-standard",
+  unknown: "Unknown type",
+};
+
+$("printerBtn").addEventListener("click", async () => {
+  $("printerBtn").disabled = true;
+  $("printerProgress").textContent = "starting…";
+  $("printerResult").className = "result empty";
+  $("printerResult").textContent = "identifying printer…";
+  try {
+    const r = await (await fetch("/api/printer", { method: "POST" })).json();
+    if (r.error) throw new Error(r.error);
+    renderPrinter(r);
+  } catch (e) {
+    $("printerResult").className = "result";
+    $("printerResult").textContent = "error: " + e.message;
+  } finally {
+    $("printerBtn").disabled = false;
+    $("printerProgress").textContent = "";
+  }
+});
+
+function renderPrinter(r) {
+  const el = $("printerResult");
+  el.className = "result";
+  const conf = Math.round(r.confidence * 100);
+  const name =
+    r.brand !== "unknown" && r.model !== "unknown"
+      ? `${r.brand} ${r.model}`
+      : r.brand !== "unknown"
+        ? r.brand
+        : "Unidentified make";
+  const rows = [
+    ["Type", KINE_LABEL[r.kinematics] || r.kinematics],
+    ["Enclosure", r.enclosure],
+    ["Visible text", r.visibleText || "—"],
+  ]
+    .map(([k, v]) => `<div class="field"><b>${k}:</b> ${v}</div>`)
+    .join("");
+  const via =
+    r.identifiedVia === "web"
+      ? `<span class="tag minor">🌐 web-identified</span>`
+      : `<span class="tag">👁️ vision-only</span>`;
+  const sources = (r.sources || []).length
+    ? `<details class="sources"><summary>Sources (${r.sources.length})</summary>` +
+      r.sources
+        .map((s) => `<div class="src"><a href="${s.url}" target="_blank" rel="noopener">${s.title}</a></div>`)
+        .join("") +
+      `</details>`
+    : "";
+  el.innerHTML = `
+    <div class="verdict ${r.confidence >= 0.6 ? "ok" : "uncertain"}">🖨️ ${name}</div>
+    <div class="confbar"><span style="width:${conf}%"></span></div>
+    <div>${r.summary}</div>
+    <div class="tags">${via}</div>
+    ${rows}
+    ${sources}
+    <p class="hint">${r.votes.length} pass(es) · ${conf}% agreed on form factor.</p>
+    <div class="thumbs"><img src="${r.snapshotPath}" /></div>`;
+}
+
+// Surface the last printer identification on load.
+(async () => {
+  try {
+    const s = await (await fetch("/api/status")).json();
+    if (s.latestPrinter) renderPrinter(s.latestPrinter);
+  } catch {}
+})();
+
+// ---------- use case 3: bed / job state ----------
+const BED_LABEL = {
+  empty: "🟢 Empty / clean",
+  printing: "🖨️ Printing",
+  complete: "✅ Complete",
+  failed: "✕ Failed",
+  unsure: "? Unsure",
+};
+// Reuse the verdict color classes: green for empty/complete, red for failed, amber otherwise.
+const BED_CLASS = { empty: "ok", complete: "ok", printing: "uncertain", failed: "failed", unsure: "uncertain" };
+
+$("bedBtn").addEventListener("click", async () => {
+  $("bedBtn").disabled = true;
+  $("bedProgress").textContent = "starting…";
+  $("bedResult").className = "result empty";
+  $("bedResult").textContent = "reading bed state…";
+  try {
+    const r = await (await fetch("/api/bed-state", { method: "POST" })).json();
+    if (r.error) throw new Error(r.error);
+    renderBed(r);
+  } catch (e) {
+    $("bedResult").className = "result";
+    $("bedResult").textContent = "error: " + e.message;
+  } finally {
+    $("bedBtn").disabled = false;
+    $("bedProgress").textContent = "";
+  }
+});
+
+function renderBed(r) {
+  const el = $("bedResult");
+  el.className = "result";
+  const conf = Math.round(r.confidence * 100);
+  el.innerHTML = `
+    <div class="verdict ${BED_CLASS[r.state] || "uncertain"}">${BED_LABEL[r.state] || r.state}</div>
+    <div class="confbar"><span style="width:${conf}%"></span></div>
+    <div>${r.summary}</div>
+    <p class="hint">${r.votes.length} pass(es) · ${conf}% agreed on "${r.state}".</p>
+    <div class="thumbs"><img src="${r.snapshotPath}" /></div>`;
+}
+
+// Surface the last bed-state reading on load.
+(async () => {
+  try {
+    const s = await (await fetch("/api/status")).json();
+    if (s.latestBedState) renderBed(s.latestBedState);
+  } catch {}
+})();
 
 // ---------- use case 2: troubleshoot ----------
 $("tsBtn").addEventListener("click", async () => {

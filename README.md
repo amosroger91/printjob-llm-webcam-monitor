@@ -19,6 +19,18 @@ No cloud · no API keys · no images leave your machine (unless you opt into Gem
 
 ---
 
+### ⬇️ Install on Windows (one line)
+
+Download and launch the latest prebuilt installer — paste into **PowerShell**:
+
+```powershell
+$u='https://github.com/amosroger91/SpaghettiAI/releases/download/v1.0.0/SpaghettiAI-Setup-1.0.0.exe'; $o="$env:TEMP\SpaghettiAI-Setup-1.0.0.exe"; Invoke-WebRequest $u -OutFile $o; Start-Process $o
+```
+
+Prefer to build from source or run on macOS/Linux/Docker? See [Quick start](#quick-start) and [Run it your way](#run-it-your-way).
+
+---
+
 > **If you've been looking for a good use case for AI as a print farm owner, this is it.**
 > A local vision model watching every camera, catching spaghetti, reading the bed, and
 > answering "how's the farm?" from a chat client — running entirely on hardware you own,
@@ -221,7 +233,8 @@ with `webcam.fps`, or turn the whole thing off with `webcam.enabled: false`.
 
 **1 · Node (dev)** — `npm run dev`, open the URLs above.
 
-**2 · Desktop app (Electron)** — a standalone, one-click product for end users, no terminal:
+**2 · Desktop app (Electron)** — a standalone, one-click product for end users, no terminal.
+Grab the [prebuilt Windows installer](#-install-on-windows-one-line) (top of this page), or build it yourself:
 
 ```bash
 npm install          # fetches the Electron runtime

@@ -11,9 +11,10 @@ interface ChatMessage {
 // `format` field to force schema-valid JSON, and temperature 0 for determinism
 // so the self-consistency vote reflects genuine model uncertainty, not sampling.
 export class OllamaVisionProvider implements VisionProvider {
-  readonly name: string;
-  constructor(private cfg: AiConfig) {
-    this.name = `ollama:${cfg.model}`;
+  constructor(private cfg: AiConfig) {}
+
+  get name(): string {
+    return `ollama:${this.cfg.model}`;
   }
 
   private async chat(req: VisionRequest): Promise<string> {

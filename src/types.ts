@@ -24,11 +24,13 @@ export interface ImageConfig {
 }
 
 export interface AiConfig {
-  provider: "ollama";
+  provider: "ollama" | "gemini";
   baseUrl: string;
   model: string;
   temperature: number;
   numCtx: number;
+  /** Google Gemini API key (only used when provider is "gemini"). From env PW_GEMINI_API_KEY / GEMINI_API_KEY or the GUI. */
+  apiKey?: string;
 }
 
 export interface CheckConfig {

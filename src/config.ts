@@ -71,6 +71,9 @@ function load(): AppConfig {
   if (process.env.PW_CAMERA_TYPE) raw.cameras[0].type = process.env.PW_CAMERA_TYPE as CameraConfig["type"];
   if (process.env.PW_MODEL) raw.ai.model = process.env.PW_MODEL;
   if (process.env.PW_OLLAMA_URL) raw.ai.baseUrl = process.env.PW_OLLAMA_URL;
+  if (process.env.PW_AI_PROVIDER) raw.ai.provider = process.env.PW_AI_PROVIDER as AppConfig["ai"]["provider"];
+  const geminiKey = process.env.PW_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+  if (geminiKey) raw.ai.apiKey = geminiKey;
   if (process.env.PW_PORT) raw.server.port = Number(process.env.PW_PORT);
   applyAlertEnv(raw.alerts.channels);
   if (process.env.PW_ALERTS_ENABLED) raw.alerts.enabled = process.env.PW_ALERTS_ENABLED !== "false";
@@ -133,6 +136,7 @@ const SECRET = "••••••"; // shown in place of a stored secret; sendi
 export function publicConfig(): AppConfig {
   const c = JSON.parse(JSON.stringify(config)) as AppConfig;
   delete c.camera;
+  if (c.ai.apiKey) c.ai.apiKey = SECRET;
   for (const ch of c.alerts.channels) {
     if (ch.token) ch.token = SECRET;
     if (ch.webhookUrl) ch.webhookUrl = SECRET;
@@ -157,6 +161,7 @@ export function saveConfig(patch: Partial<AppConfig>): { restartRequired: string
   }
 
   // Preserve secrets when the GUI echoes the mask back.
+  if (patch.ai?.apiKey === SECRET) patch.ai.apiKey = config.ai.apiKey;
   if (patch.alerts?.channels) {
     for (const ch of patch.alerts.channels) {
       const prev = config.alerts.channels.find((p) => p.type === ch.type && p.mode === ch.mode);

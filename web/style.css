@@ -347,6 +347,11 @@ details.angle-tip summary { cursor: pointer; color: var(--accent); }
 details.angle-tip ul { margin: 8px 0 0; padding-left: 18px; color: var(--muted); }
 details.angle-tip li { margin: 3px 0; }
 
+/* ---------- settings: system box ---------- */
+.sysbox { margin-top: 14px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--elev); }
+.sysbox .suggest { margin: 8px 0; font-size: 13px; }
+.sysbox .suggest button { margin-left: 6px; }
+
 /* ---------- motion preference ---------- */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .001ms !important; transition-duration: .001ms !important; }

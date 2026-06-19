@@ -1,6 +1,7 @@
 import express from "express";
 import type { Request } from "express";
 import { EventEmitter } from "node:events";
+import os from "node:os";
 import { join } from "node:path";
 import { ROOT, publicConfig, saveConfig } from "../config.js";
 import type { AppConfig } from "../types.js";
@@ -328,6 +329,29 @@ export function createServer(cfg: AppConfig, cameras: Map<string, CameraEntry>, 
     });
   }
 
+  // --- system specs + model suggestion ---
+  app.get("/api/system", (_req, res) => res.json(systemInfo()));
+
+  // Stream `ollama pull <model>` progress (proxies Ollama's native pull API).
+  app.post("/api/ollama/pull", async (req, res) => {
+    const model = String(req.body?.model ?? "").trim();
+    if (!model) return res.status(400).json({ error: "model required" });
+    try {
+      const r = await fetch(`${cfg.ai.baseUrl}/api/pull`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: model, stream: true }),
+      });
+      if (!r.ok || !r.body) return res.status(502).json({ error: `ollama pull returned ${r.status}` });
+      res.set("Content-Type", "application/x-ndjson").set("Cache-Control", "no-store");
+      for await (const chunk of r.body as unknown as AsyncIterable<Uint8Array>) res.write(chunk);
+      res.end();
+    } catch (e) {
+      if (!res.headersSent) res.status(500).json({ error: (e as Error).message });
+      else res.end();
+    }
+  });
+
   // --- configuration (GUI / API) ---
   app.get("/api/config", (_req, res) => res.json(publicConfig()));
   app.post("/api/config", (req, res) => {
@@ -350,4 +374,32 @@ export function createServer(cfg: AppConfig, cameras: Map<string, CameraEntry>, 
   app.use("/", express.static(join(ROOT, "web")));
 
   return { app, bus };
+}
+
+/** Read host specs and suggest an Ollama vision model sized to the machine's RAM. */
+function systemInfo() {
+  const ramGb = Math.round((os.totalmem() / 1e9) * 10) / 10;
+  const cpus = os.cpus();
+  let model: string, reason: string;
+  if (ramGb < 6) {
+    model = "moondream";
+    reason = `Only ~${ramGb} GB RAM — a tiny, fast vision model is the safe choice.`;
+  } else if (ramGb < 12) {
+    model = "gemma3:4b";
+    reason = `~${ramGb} GB RAM — a 4B model is a good balance of speed and accuracy.`;
+  } else if (ramGb < 24) {
+    model = "qwen2.5vl:7b";
+    reason = `~${ramGb} GB RAM — you can run a 7B model for stronger accuracy.`;
+  } else {
+    model = "llama3.2-vision:11b";
+    reason = `~${ramGb} GB RAM — plenty for an 11B vision model.`;
+  }
+  return {
+    platform: process.platform,
+    arch: process.arch,
+    cpu: cpus[0]?.model?.trim() ?? "unknown",
+    cpuCount: cpus.length,
+    ramGb,
+    suggestion: { model, reason, note: "A dedicated GPU makes checks dramatically faster but isn't required." },
+  };
 }

@@ -33,9 +33,25 @@
       <section class="panel">
         <h2>Vision model</h2>
         <div class="grid2">
-          <label>Ollama model <input id="ai_model" /></label>
-          <label>Ollama URL <input id="ai_baseUrl" /></label>
+          <label>Provider
+            <select id="ai_provider">
+              <option value="ollama">Ollama (local · private)</option>
+              <option value="gemini">Google Gemini (cloud)</option>
+            </select>
+          </label>
+          <label>Model
+            <span style="display:flex;gap:6px">
+              <select id="ai_model" style="flex:1"></select>
+              <button id="dlModel" class="small" type="button" title="Download this Ollama model">⬇</button>
+            </span>
+          </label>
         </div>
+        <label id="ollamaUrlRow">Ollama URL <input id="ai_baseUrl" /></label>
+        <label id="geminiKeyRow" style="display:none">Gemini API key <input id="ai_apiKey" type="password" placeholder="AIza…" autocomplete="off" /></label>
+        <p id="geminiNote" class="hint" style="display:none">⚠ With Gemini, frames are sent to Google — the only mode where images leave your machine.</p>
+        <div id="dlProgress" class="hint"></div>
+
+        <div id="sysbox" class="sysbox"><span class="hint">Detecting your system…</span></div>
       </section>
 
       <section class="panel">

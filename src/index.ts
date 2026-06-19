@@ -1,14 +1,14 @@
 import { config } from "./config.js";
 import { store } from "./store/store.js";
 import { createCameraRegistry } from "./capture/index.js";
-import { OllamaVisionProvider } from "./ai/ollama.js";
+import { DispatchVisionProvider } from "./ai/dispatch.js";
 import { createServer } from "./server/server.js";
 
 async function main() {
   store.init();
 
   const cameras = createCameraRegistry(config.cameras);
-  const ai = new OllamaVisionProvider(config.ai);
+  const ai = new DispatchVisionProvider(config.ai);
   const { app } = createServer(config, cameras, ai);
 
   const { port, host } = config.server;

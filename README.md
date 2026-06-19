@@ -24,8 +24,10 @@ No cloud · no API keys · no images leave your machine (unless you opt into Gem
 Download and launch the latest prebuilt installer — paste into **PowerShell**:
 
 ```powershell
-$u='https://github.com/amosroger91/SpaghettiAI/releases/download/v1.0.0/SpaghettiAI-Setup-1.0.0.exe'; $o="$env:TEMP\SpaghettiAI-Setup-1.0.0.exe"; Invoke-WebRequest $u -OutFile $o; Start-Process $o
+[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; $u='https://github.com/amosroger91/SpaghettiAI/releases/download/v1.0.0/SpaghettiAI-Setup-1.0.0.exe'; $o="$env:TEMP\SpaghettiAI-Setup-1.0.0.exe"; Invoke-WebRequest $u -OutFile $o -UseBasicParsing; Start-Process $o
 ```
+
+> The `Tls12` prefix is needed on **Windows PowerShell 5.1** (its default TLS is too old for GitHub's download CDN); harmless on PowerShell 7+.
 
 Prefer to build from source or run on macOS/Linux/Docker? See [Quick start](#quick-start) and [Run it your way](#run-it-your-way).
 

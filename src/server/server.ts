@@ -70,6 +70,16 @@ export function createServer(cfg: AppConfig, cameras: Map<string, CameraEntry>, 
     });
   };
   const maybeAlertBed = (r: BedStateResult) => {
+    if (r.bedVisible === false) {
+      fire({
+        key: `bed:${r.cameraId}:nobed`,
+        level: "critical",
+        title: `No print bed detected — ${camName(r.cameraId)}`,
+        body: r.summary,
+        ts: Date.now(),
+      });
+      return;
+    }
     if (r.state !== "failed") return;
     fire({
       key: `bed:${r.cameraId}:failed`,

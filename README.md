@@ -15,6 +15,11 @@ No cloud · no API keys · no images leave your machine.
 
 ---
 
+> **If you've been looking for a good use case for AI as a print farm owner, this is it.**
+> A local vision model watching every camera, catching spaghetti, reading the bed, and
+> answering "how's the farm?" from a chat client — running entirely on hardware you own,
+> with [nothing but a single text search ever leaving the machine](#privacy--offline-use).
+
 ## What it does
 
 | | |
@@ -42,6 +47,7 @@ Run it however you like: **`npm run dev`**, a one-click **desktop app** (Electro
 - [Choosing a model](#choosing-a-model)
 - [Printer & bed state](#printer--bed-state)
 - [How it works](#how-it-works)
+- [Privacy & offline use](#privacy--offline-use) (and air-gapped setups)
 - [Tuning & accuracy](#tuning--accuracy)
 - [API](#api)
 - [Contributing](#contributing)
@@ -274,10 +280,12 @@ legible text it runs a **web lookup** and names the printer from real search res
                                                      →  Anycubic Kobra X  (web-identified)
 ```
 
-> **Privacy:** the web lookup is the *only* feature that sends anything off the machine,
-> and it sends **only the short text read off the printer** — never the image. Set
-> `printer.webLookup: false` in `config.json` for fully-offline, vision-only detection.
-> Endpoint and result count are configurable under the `printer` block.
+> **Privacy:** the web lookup is the *only* feature that sends anything off the machine in
+> the default config, and it sends **only the short text read off the printer** — never the
+> image. Set `printer.webLookup: false` for fully-offline, vision-only detection. Endpoint
+> and result count are configurable under the `printer` block. Full details, including an
+> air-gapped checklist, are in **[Privacy & offline use](#privacy--offline-use)** /
+> [`docs/PRIVACY.md`](docs/PRIVACY.md).
 
 ## How it works
 
@@ -303,6 +311,35 @@ legible text it runs a **web lookup** and names the printer from real search res
 Add a `VisionProvider` to swap the model backend, or a `CaptureSource` to add a camera type
 — nothing else changes. Results carry a `cameraId`, so every endpoint is per-camera via
 `?camera=id`.
+
+## Privacy & offline use
+
+SpaghettiAI runs **fully on your own machine**. The model is local (Ollama), frames are
+analyzed locally, and **no image ever leaves the host under any configuration** — there
+is no code path that uploads a snapshot anywhere.
+
+In the **default** config, exactly one feature makes an outbound request — the printer
+**web lookup** — and it sends **only the short text the model read off the machine** (e.g.
+`ACE GEN2`) to a search engine to ground the make/model. Never an image. It fails soft, so
+if it's blocked or offline, detection falls back to a vision-only guess.
+
+| Connection | Sends | Default | Turn off |
+|------------|-------|---------|----------|
+| **Ollama** (`localhost`) | Frame + prompt — **stays on the host** | On (required) | — local only |
+| **Printer web lookup** (DuckDuckGo) | **Text only** (branding read off the printer) | **On** | `printer.webLookup: false` |
+| **Slack / Discord alerts** | Alert text (title + summary) — **no image** | **Off** | leave unconfigured |
+| **Swagger UI** on `/docs` (browser, not server) | Nothing about you — just the page's JS/CSS from a CDN | On for that page only | don't open `/docs` |
+
+**Going fully offline** is one line — `printer.webLookup: false` gives you zero outbound
+server traffic, and printer detection still works (vision-only). For a no-internet
+**air-gapped** install — preloading the model, offline npm install, vendoring the docs
+page, and locking down network exposure — see the full
+**[Privacy & offline guide →](docs/PRIVACY.md)**.
+
+> **Heads up on exposure:** the server binds to `127.0.0.1` by default and has **no auth**.
+> That's safe on loopback, but if you set `server.host: 0.0.0.0` or expose the port, anyone
+> who can reach it can trigger checks, read snapshots, and change config. See
+> [`docs/PRIVACY.md`](docs/PRIVACY.md#network-exposure) and the hardening roadmap.
 
 ## Tuning & accuracy
 

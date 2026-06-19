@@ -71,9 +71,29 @@ function renderHealth(id, r) {
   const [label, cls] = HEALTH[r.verdict] || ["—", ""];
   setBadge(id, "health", `${label} ${Math.round(r.confidence * 100)}%`, cls);
 }
+const noBed = {}; // cameraId -> true when no bed visible
 function renderBed(id, r) {
-  const [label, cls] = BED[r.state] || ["—", ""];
-  setBadge(id, "bed", label, cls);
+  if (r.bedVisible === false) {
+    setBadge(id, "bed", "⛔ No bed", "failed");
+    noBed[id] = true;
+  } else {
+    const [label, cls] = BED[r.state] || ["—", ""];
+    setBadge(id, "bed", label, cls);
+    delete noBed[id];
+  }
+  updateNoBedOverlay();
+}
+
+function updateNoBedOverlay() {
+  const ids = Object.keys(noBed);
+  const ov = $("nobedOverlay");
+  if (ids.length) {
+    const names = ids.map((id) => cameras.find((c) => c.id === id)?.label || id);
+    $("nobedWhich").textContent = ` — ${names.join(", ")}`;
+    ov.classList.remove("hidden");
+  } else {
+    ov.classList.add("hidden");
+  }
 }
 function renderPrinter(id, r) {
   const name = r.brand !== "unknown" && r.model !== "unknown" ? `${r.brand} ${r.model}` : r.brand !== "unknown" ? r.brand : "unidentified";

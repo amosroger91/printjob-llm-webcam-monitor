@@ -15,3 +15,5 @@ test/eval-results.json
 
 # headless screenshot scratch
 .chrome-tmp/
+# editor backups
+*.bak

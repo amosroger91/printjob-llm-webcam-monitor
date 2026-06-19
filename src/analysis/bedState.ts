@@ -41,18 +41,37 @@ export async function runBedStateCheck(
         schema: BED_STATE_SCHEMA as unknown as Record<string, unknown>,
         temperature: samples > 1 ? cfg.check.sampleTemperature : 0,
       });
-      votes.push({ state: normalizeState(json.bed_state), reasoning: (json.reasoning ?? "").trim() });
+      votes.push({
+        state: normalizeState(json.bed_state),
+        bedVisible: json.bed_visible !== false,
+        objectPresent: json.object_present === true,
+        reasoning: (json.reasoning ?? "").trim(),
+      });
     } catch (e) {
       onProgress?.(`pass error: ${(e as Error).message}`);
     }
   }
   if (votes.length === 0) throw new Error("all model passes failed for the bed-state check");
 
-  const { state, confidence } = tally(votes);
-  const occupied = OCCUPIED.includes(state);
-  const summary = buildSummary(state, confidence, votes);
+  // Majority signals from the decomposition.
+  const bedVisible = votes.filter((v) => v.bedVisible).length >= votes.length / 2;
+  const objectPresent = votes.filter((v) => v.objectPresent).length > votes.length / 2;
 
-  const result: BedStateResult = { id, ts, cameraId, state, occupied, confidence, summary, votes, samples, snapshotPath };
+  let { state, confidence } = tally(votes);
+  // Object clearly present but the state vote landed on "empty" → trust the object
+  // signal and call it occupied (default to "complete" for an idle finished part).
+  if (objectPresent && state === "empty") {
+    const occupiedVote = votes.find((v) => OCCUPIED.includes(v.state))?.state;
+    state = occupiedVote ?? "complete";
+  } else if (!objectPresent && OCCUPIED.includes(state) && bedVisible) {
+    // Conversely, nobody saw an object but the state says occupied → empty.
+    state = "empty";
+  }
+
+  const occupied = OCCUPIED.includes(state);
+  const summary = buildSummary(state, confidence, votes, bedVisible);
+
+  const result: BedStateResult = { id, ts, cameraId, state, occupied, bedVisible, confidence, summary, votes, samples, snapshotPath };
   store.addBedState(result);
   return result;
 }
@@ -79,9 +98,14 @@ function tally(votes: BedStateVote[]): { state: BedState; confidence: number } {
   return { state: topState, confidence: clamp01(topCount / votes.length) };
 }
 
-function buildSummary(state: BedState, confidence: number, votes: BedStateVote[]): string {
+function buildSummary(state: BedState, confidence: number, votes: BedStateVote[], bedVisible: boolean): string {
   const pct = Math.round(confidence * 100);
   const note = votes.find((v) => v.state === state)?.reasoning;
+  if (!bedVisible) {
+    return `No print bed detected in the frame — check the camera is aimed at the printer. (${votes.length} pass${
+      votes.length === 1 ? "" : "es"
+    }).`;
+  }
   const label: Record<BedState, string> = {
     empty: "Bed is empty and clean — ready for a new print",
     printing: "Print in progress on the bed",

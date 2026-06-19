@@ -214,6 +214,8 @@ export type BedState = "empty" | "printing" | "complete" | "failed" | "unsure";
 /** One model pass's vote on the bed state. */
 export interface BedStateVote {
   state: BedState;
+  bedVisible: boolean;
+  objectPresent: boolean;
   reasoning: string;
 }
 
@@ -225,6 +227,8 @@ export interface BedStateResult {
   state: BedState;
   /** Convenience: whether anything is on the bed (printing | complete | failed). */
   occupied: boolean;
+  /** False when no build plate is visible in the frame at all (camera misaimed/covered). */
+  bedVisible: boolean;
   confidence: number; // 0..1
   summary: string;
   votes: BedStateVote[];

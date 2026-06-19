@@ -71,36 +71,44 @@ export const BED_STATE_SYSTEM = `You are inspecting one webcam photo of a 3D pri
 Report only what is clearly visible. The machine's own frame, gantry, nozzle, wires, and screen are NOT objects on the bed.
 Answer ONLY with the requested JSON. No prose.`;
 
-const BED_STATES = `Classify the bed into exactly one state:
-- "empty": the build plate is clear and clean — no printed object on it. The printer is idle or ready for a new job. A bare textured/glass/PEI plate with nothing on it is "empty".
-- "printing": a partially-built object is on the plate AND the print is clearly still in progress — e.g. the nozzle/toolhead is down near the object, mid-build, only some layers done.
-- "complete": a finished, intact printed object is sitting on the plate and the toolhead is parked away / lifted — the job looks done and the part is ready to remove.
-- "failed": the plate is occupied by a clearly bad result — a tangled spaghetti mess, a print that detached and is loose/knocked over, or a blob — rather than a clean solid object.
-- "unsure": the image is too dark, blurry, or obstructed to tell.
+const BED_STATES = `Answer these in order:
 
-Guidance:
-- "empty" vs "complete": empty = nothing on the plate; complete = a solid finished object is resting on it.
-- "printing" vs "complete": printing = toolhead engaged, build unfinished; complete = toolhead parked, object whole.
-- "complete" vs "failed": complete = one solid intact object; failed = loose strands, a tangle, or a detached/toppled mess.
-- Do not count the printer's frame, gantry rails, nozzle, cables, or a control screen as objects on the bed.`;
+1) bed_visible — Is a 3D-printer build plate / bed visible ANYWHERE in this frame? The bed is the flat platform the printer builds on (often a dark/textured PEI sheet, glass, or metal plate). If you cannot see a build plate at all — the camera is pointed away, covered, unplugged, or showing something else — set bed_visible=false. Otherwise true.
+
+2) object_present — Look CAREFULLY at the surface of the plate. Is there ANY printed object, part, model, blob, or piece of plastic resting on it? Even ONE small, finished, or simple solid shape sitting on the plate counts as object_present=true. Only a completely bare, clean plate is object_present=false. Do NOT count the printer's own frame, gantry, nozzle, cables, clips, or screen as an object.
+
+3) bed_state — exactly one:
+- "empty": the plate is bare and clean — nothing printed on it (object_present is false).
+- "printing": an object is on the plate AND the build is clearly still in progress (toolhead/nozzle down near it, only some layers done).
+- "complete": a finished, intact printed object is sitting on the plate, toolhead parked/lifted — ready to remove.
+- "failed": the plate is occupied by a clearly bad result — tangled spaghetti, a detached/toppled print, or a blob.
+- "unsure": too dark, blurry, or obstructed to tell (but still answer bed_visible/object_present as best you can).
+
+Key rules:
+- If object_present is true, bed_state must NOT be "empty" — pick printing / complete / failed.
+- If object_present is false and the plate is clean, bed_state is "empty".`;
 
 export function bedStateUserPrompt(): string {
-  return `Look at this 3D printer photo and report the state of the build plate.
+  return `Look at this 3D printer photo and report on the build plate.
 ${BED_STATES}
 
-Report the single best bed_state and one short sentence describing what you see on the plate.`;
+Give bed_visible, object_present, the single best bed_state, and one short sentence describing what you see.`;
 }
 
 export const BED_STATE_SCHEMA = {
   type: "object",
   properties: {
+    bed_visible: { type: "boolean" },
+    object_present: { type: "boolean" },
     bed_state: { type: "string", enum: ["empty", "printing", "complete", "failed", "unsure"] },
     reasoning: { type: "string" },
   },
-  required: ["bed_state", "reasoning"],
+  required: ["bed_visible", "object_present", "bed_state", "reasoning"],
 } as const;
 
 export interface RawBedStateJson {
+  bed_visible: boolean;
+  object_present: boolean;
   bed_state: "empty" | "printing" | "complete" | "failed" | "unsure";
   reasoning: string;
 }

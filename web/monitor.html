@@ -31,6 +31,16 @@
           </div>
         </div>
         <p class="hint"><span id="cycleState">Idle.</span> <span id="lastRun"></span></p>
+        <details class="angle-tip">
+          <summary>📐 Best camera angle for accurate detection</summary>
+          <ul>
+            <li><b>Frame the whole bed.</b> The print plate should fill most of the view, roughly head-on or at a slight downward angle (~15–30°) — not edge-on.</li>
+            <li><b>Keep it well lit and in focus.</b> Even, diffuse light; avoid glare, deep shadow, and backlight from a window.</li>
+            <li><b>Mount it steady</b> and clear of the moving gantry, so frames aren't blurred or blocked mid-print.</li>
+            <li><b>Show the print, not just the machine.</b> If the nozzle or a part hides the object, the model can't judge it — favor a side that keeps the part visible.</li>
+            <li><b>Plain background.</b> Fewer competing objects behind the printer means fewer false "spaghetti" reads.</li>
+          </ul>
+        </details>
       </section>
 
       <div id="grid" class="camgrid"></div>
@@ -48,6 +58,10 @@
         <div id="log" class="logbox"></div>
       </section>
     </main>
+
+    <div id="nobedOverlay" class="nobed-overlay hidden">
+      <div class="nobed-msg">⛔ No bed detected<span id="nobedWhich"></span><small>Point the camera at the printer's bed, or check it's connected.</small></div>
+    </div>
 
     <script src="/monitor.js"></script>
   </body>
